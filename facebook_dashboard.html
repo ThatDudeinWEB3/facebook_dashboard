@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social Media Posting Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+    <!-- Chosen Palette: Warm Neutrals with Blue/Orange Accents -->
+    <!-- Application Structure Plan: The single-page dashboard now supports multiple user roles. The structure maintains its logical flow of KPIs, reports, and data entry for standard users. For an admin user, a new, dedicated dashboard section is revealed at the end of the page. This admin view focuses on macro-level insights, showing a direct comparison of user contributions via two distinct charts, allowing for a quick performance overview. The core data fetching and logic remain centralized, with conditional rendering controlling the user experience. -->
+    <!-- Visualization & Content Choices:
+        - Monthly Goal: Goal: Inform -> Viz: KPI Card + Progress Bar -> Interaction: Updates from Firestore data -> Justification: Provides a live status of the overall objective.
+        - Daily/Weekly/Monthly Reports: Goal: Inform/Compare -> Viz: Tabbed views with Stacked Bar (daily) and Line (weekly/monthly) charts -> Interaction: Clicking tabs to switch views, data is from Firestore -> Justification: Breaks down the large goal into manageable, explorable chunks.
+        - Posting Frequency & Team Split: Goal: Inform -> Viz: KPI Card + Doughnut Chart -> Interaction: Hover for tooltips -> Justification: Confirms the core strategy visually and succinctly.
+        - Add Post Form: Goal: Track/Engage -> Viz: Form with input fields -> Interaction: Button click saves data to Firestore -> Justification: Turns a static plan into an active, trackable process.
+        - Post History: Goal: Organize/Inform -> Viz: Table -> Interaction: Displays details of recent posts -> Justification: Gives users transparency and a log of their activity.
+        - Admin Comparison Chart: Goal: Compare -> Viz: Bar Chart -> Interaction: Hover for tooltips -> Justification: Provides a clear side-by-side view of total posts by user for management.
+        - Admin Daily Posts Chart: Goal: Compare/Engage -> Viz: Stacked Bar Chart -> Interaction: Hover for tooltips -> Justification: Shows the total daily progress and each user's contribution to that total. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDFBF8;
+            color: #3f3f46;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 250px;
+            max-height: 300px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 300px;
+                max-height: 350px;
+            }
+        }
+        .kpi-card {
+            background-color: #FFFFFF;
+            border: 1px solid #F3F0EC;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .kpi-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+        }
+        .btn {
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .tab-button {
+            background-color: #F3F0EC;
+            color: #52525B;
+            transition: background-color 0.2s ease;
+        }
+        .tab-button.active {
+            background-color: #FFFFFF;
+            color: #27272A;
+            box-shadow: 0 -2px 0 0 #5B82F6 inset;
+        }
+        .post-type-btn {
+            background-color: #E5E7EB;
+            color: #4B5563;
+        }
+        .post-type-btn.selected {
+            background-color: #5B82F6;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold text-zinc-800">Social Media Posting Dashboard</h1>
+            <p id="user-status" class="text-zinc-500 mt-2">Loading...</p>
+        </header>
+
+        <main class="space-y-12">
+            <section id="kpis">
+                <div class="text-center mb-8">
+                     <h2 class="text-2xl font-semibold text-zinc-700">Monthly Mission</h2>
+                     <p class="text-zinc-500 mt-1">Our primary targets for the remainder of the month. Data is saved in real-time.</p>
+                </div>
+                <div class="w-full px-4 mb-4">
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200/80">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm font-medium text-zinc-600">Monthly Progress</span>
+                            <span id="progress-percentage" class="text-sm font-bold text-zinc-700">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div id="progress-bar" class="bg-blue-500 h-2.5 rounded-full" style="width: 0%"></div>
+                        </div>
+                         <div class="text-right mt-1">
+                            <span id="progress-text" class="text-xs text-zinc-500">0 / 800 posts</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                    <div class="kpi-card p-5 rounded-xl shadow-sm text-center">
+                        <h3 class="text-zinc-500 font-medium">Monthly Goal</h3>
+                        <p class="text-4xl font-bold text-zinc-800 mt-2">800</p>
+                        <p class="text-xs text-zinc-400">Total Posts</p>
+                    </div>
+                    <div class="kpi-card p-5 rounded-xl shadow-sm text-center">
+                        <h3 class="text-zinc-500 font-medium">Daily Target</h3>
+                        <p class="text-4xl font-bold text-zinc-800 mt-2">32</p>
+                        <p class="text-xs text-zinc-400">Posts Per Day</p>
+                    </div>
+                    <div class="kpi-card p-5 rounded-xl shadow-sm text-center">
+                        <h3 class="text-zinc-500 font-medium">Posting Frequency</h3>
+                        <p class="text-4xl font-bold text-zinc-800 mt-2">~45</p>
+                        <p class="text-xs text-zinc-400">Minutes Per Post</p>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="reports">
+                <div class="text-center mb-8">
+                    <h2 class="text-2xl font-semibold text-zinc-700">Detailed Reports</h2>
+                    <p class="text-zinc-500 mt-1">View your progress towards the goal on different time scales.</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200/80">
+                    <div class="flex justify-center -mt-6">
+                        <button id="daily-tab" class="tab-button px-6 py-3 rounded-t-lg font-semibold text-sm transition-all duration-200 active">Daily</button>
+                        <button id="weekly-tab" class="tab-button px-6 py-3 rounded-t-lg font-semibold text-sm transition-all duration-200">Weekly</button>
+                        <button id="monthly-tab" class="tab-button px-6 py-3 rounded-t-lg font-semibold text-sm transition-all duration-200">Monthly</button>
+                    </div>
+                    <div id="daily-report" class="tab-content pt-4">
+                        <h3 class="font-semibold text-center text-zinc-700 mb-1">Progress Today</h3>
+                        <p id="daily-progress-text" class="text-center text-zinc-500 text-sm mb-4">0 of 32 posts</p>
+                        <div class="chart-container mx-auto" style="height: 150px; max-height: 200px;">
+                            <canvas id="dailyProgressChart"></canvas>
+                        </div>
+                    </div>
+                    <div id="weekly-report" class="tab-content pt-4 hidden">
+                        <h3 class="font-semibold text-center text-zinc-700 mb-1">Weekly Progress by Person</h3>
+                        <div class="chart-container mx-auto">
+                            <canvas id="weeklyProgressChart"></canvas>
+                        </div>
+                    </div>
+                    <div id="monthly-report" class="tab-content pt-4 hidden">
+                        <h3 class="font-semibold text-center text-zinc-700 mb-1">Monthly Trend</h3>
+                        <div class="chart-container mx-auto">
+                            <canvas id="monthlyTrendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="add-post">
+                <div class="text-center mb-8">
+                    <h2 class="text-2xl font-semibold text-zinc-700">Add a New Post</h2>
+                    <p class="text-zinc-500 mt-1">Log your activity to see your progress update in real-time.</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200/80 space-y-4">
+                    <div>
+                        <label for="post-link" class="block text-sm font-medium text-gray-700 mb-1">Post Link (Optional)</label>
+                        <input type="url" id="post-link" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://facebook.com/your-post-link">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Post Type</label>
+                        <div id="post-type-container" class="flex flex-wrap gap-2">
+                            <button class="post-type-btn rounded-full py-1.5 px-4 text-xs font-medium focus:outline-none">Image</button>
+                            <button class="post-type-btn rounded-full py-1.5 px-4 text-xs font-medium focus:outline-none">Video</button>
+                            <button class="post-type-btn rounded-full py-1.5 px-4 text-xs font-medium focus:outline-none">Text</button>
+                            <button class="post-type-btn rounded-full py-1.5 px-4 text-xs font-medium focus:outline-none">Reel</button>
+                            <button class="post-type-btn rounded-full py-1.5 px-4 text-xs font-medium focus:outline-none">Story</button>
+                        </div>
+                    </div>
+                    <button id="add-post-btn" class="btn bg-blue-500 text-white font-semibold py-3 px-8 rounded-full w-full hover:bg-blue-600">Add Post</button>
+                </div>
+            </section>
+            
+            <section id="post-history" class="hidden">
+                 <div class="text-center mb-8">
+                    <h2 class="text-2xl font-semibold text-zinc-700">Recent Posts</h2>
+                    <p class="text-zinc-500 mt-1">A log of your most recent activity.</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200/80">
+                    <table class="w-full text-left table-auto">
+                        <thead>
+                            <tr class="bg-gray-100/50 text-gray-600 text-sm">
+                                <th class="py-2 px-4 font-semibold rounded-tl-lg">Type</th>
+                                <th class="py-2 px-4 font-semibold">Time</th>
+                                <th class="py-2 px-4 font-semibold rounded-tr-lg hidden sm:table-cell">Link</th>
+                            </tr>
+                        </thead>
+                        <tbody id="posts-table-body" class="text-gray-800 text-sm">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <section id="admin-dashboard" class="hidden">
+                 <div class="text-center mb-8">
+                    <h2 class="text-2xl font-semibold text-zinc-700">Admin Dashboard</h2>
+                    <p class="text-zinc-500 mt-1">A consolidated view of all user activity and progress.</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200/80 space-y-8">
+                    <div>
+                        <h3 class="font-semibold text-center text-zinc-700 mb-1">Total Posts by User</h3>
+                        <p class="text-center text-zinc-500 text-sm mb-4">Comparison of all posts logged so far.</p>
+                        <div class="chart-container mx-auto">
+                            <canvas id="adminTotalPostsChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-center text-zinc-700 mb-1">Daily Contribution Today</h3>
+                        <p id="admin-daily-progress-text" class="text-center text-zinc-500 text-sm mb-4">0 of 32 posts</p>
+                        <div class="chart-container mx-auto" style="height: 150px; max-height: 200px;">
+                            <canvas id="adminDailyProgressChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const adminUserId = "admin_user_id_here";
+
+        let db, auth;
+        let userId;
+        let postType = null;
+
+        const state = {
+            totalGoal: 800,
+            postsMade: 0,
+            dailyGoal: 32,
+            person1Posts: 0,
+            person2Posts: 0,
+            allPosts: [],
+        };
+
+        const postLinkInput = document.getElementById('post-link');
+        const postTypeContainer = document.getElementById('post-type-container');
+        const addPostBtn = document.getElementById('add-post-btn');
+        const userStatusEl = document.getElementById('user-status');
+        const postsTableBody = document.getElementById('posts-table-body');
+        const adminDashboard = document.getElementById('admin-dashboard');
+        const adminDailyProgressText = document.getElementById('admin-daily-progress-text');
+        
+        const tabs = {
+            daily: document.getElementById('daily-tab'),
+            weekly: document.getElementById('weekly-tab'),
+            monthly: document.getElementById('monthly-tab')
+        };
+        const tabContents = {
+            daily: document.getElementById('daily-report'),
+            weekly: document.getElementById('weekly-report'),
+            monthly: document.getElementById('monthly-report')
+        };
+        
+        let dailyProgressChart, weeklyProgressChart, monthlyTrendChart, adminTotalPostsChart, adminDailyProgressChart;
+
+        function updateUI() {
+            const totalDaily = state.person1Posts + state.person2Posts;
+            if (dailyProgressChart) {
+                dailyProgressChart.data.datasets[0].data[0] = state.person1Posts;
+                dailyProgressChart.data.datasets[1].data[0] = state.person2Posts;
+                dailyProgressChart.update();
+            }
+            dailyProgressText.textContent = `${state.person1Posts} posts today`;
+
+            if (adminDailyProgressChart) {
+                adminDailyProgressChart.data.datasets[0].data[0] = state.person1Posts;
+                adminDailyProgressChart.data.datasets[1].data[0] = state.person2Posts;
+                adminDailyProgressChart.update();
+            }
+            adminDailyProgressText.textContent = `${totalDaily} of ${state.dailyGoal} posts`;
+            
+            if (adminTotalPostsChart) {
+                 adminTotalPostsChart.data.labels = [`Me (${state.person1Posts})`, `Others (${state.person2Posts})`];
+                 adminTotalPostsChart.data.datasets[0].data = [state.person1Posts, state.person2Posts];
+                 adminTotalPostsChart.update();
+            }
+
+            const overallPercentage = state.totalGoal > 0 ? (state.postsMade / state.totalGoal) * 100 : 0;
+            progressBar.style.width = `${overallPercentage}%`;
+            progressText.textContent = `${state.postsMade} / ${state.totalGoal} posts`;
+            progressPercentage.textContent = `${Math.round(overallPercentage)}%`;
+            
+            updatePostHistory();
+        }
+
+        function updateWeeklyChart() {
+            const now = new Date();
+            const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+            
+            const weeklyPosts = state.allPosts.filter(p => new Date(p.timestamp.toDate()) >= startOfWeek);
+            const weeklyTotals = weeklyPosts.reduce((acc, post) => {
+                acc[post.userId] = (acc[post.userId] || 0) + 1;
+                return acc;
+            }, {});
+            
+            const userIds = Object.keys(weeklyTotals);
+            const datasets = userIds.map(id => ({
+                label: `User: ${id.substring(0, 4)}...`,
+                data: [weeklyTotals[id]],
+                backgroundColor: id === userId ? '#60a5fa' : '#fb923c',
+            }));
+
+            if (weeklyProgressChart) {
+                weeklyProgressChart.data.labels = ['This Week'];
+                weeklyProgressChart.data.datasets = datasets;
+                weeklyProgressChart.update();
+            } else {
+                weeklyProgressChart = new Chart(document.getElementById('weeklyProgressChart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['This Week'],
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom' },
+                            tooltip: { mode: 'index', intersect: false }
+                        },
+                        scales: {
+                            x: { stacked: true },
+                            y: { stacked: true, beginAtZero: true }
+                        }
+                    }
+                });
+            }
+        }
+
+        function updateMonthlyChart() {
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            
+            const postsByDay = {};
+            for (let i = 0; i < 30; i++) {
+                const date = new Date(startOfMonth);
+                date.setDate(startOfMonth.getDate() + i);
+                postsByDay[date.toISOString().split('T')[0]] = { count: 0, myCount: 0 };
+            }
+
+            state.allPosts.forEach(post => {
+                const postDate = post.timestamp.toDate();
+                const dateString = postDate.toISOString().split('T')[0];
+                if (postsByDay[dateString]) {
+                    postsByDay[dateString].count++;
+                    if (post.userId === userId) {
+                        postsByDay[dateString].myCount++;
+                    }
+                }
+            });
+
+            const labels = Object.keys(postsByDay);
+            const totalData = labels.map(date => postsByDay[date].count);
+            const myData = labels.map(date => postsByDay[date].myCount);
+
+            if (monthlyTrendChart) {
+                monthlyTrendChart.data.labels = labels;
+                monthlyTrendChart.data.datasets[0].data = totalData;
+                monthlyTrendChart.data.datasets[1].data = myData;
+                monthlyTrendChart.update();
+            } else {
+                monthlyTrendChart = new Chart(document.getElementById('monthlyTrendChart').getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Total Posts',
+                                data: totalData,
+                                borderColor: '#60a5fa',
+                                tension: 0.4
+                            },
+                            {
+                                label: 'My Posts',
+                                data: myData,
+                                borderColor: '#fb923c',
+                                tension: 0.4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { beginAtZero: true },
+                            x: {
+                                ticks: {
+                                    maxRotation: 45,
+                                    minRotation: 45,
+                                    callback: function(val, index) {
+                                        return index % 5 === 0 ? this.getLabelForValue(val).substring(5) : '';
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: { position: 'top' },
+                            tooltip: { mode: 'index', intersect: false }
+                        }
+                    }
+                });
+            }
+        }
+
+        function updatePostHistory() {
+            postsTableBody.innerHTML = '';
+            state.allPosts.sort((a, b) => b.timestamp.toDate() - a.timestamp.toDate());
+            state.allPosts.slice(0, 10).forEach(post => {
+                const row = document.createElement('tr');
+                row.className = 'border-b last:border-b-0 hover:bg-gray-100/50';
+                const date = post.timestamp.toDate().toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+                row.innerHTML = `
+                    <td class="py-3 px-4">${post.type || 'N/A'}</td>
+                    <td class="py-3 px-4">${date}</td>
+                    <td class="py-3 px-4 hidden sm:table-cell">
+                        ${post.link ? `<a href="${post.link}" target="_blank" class="text-blue-500 hover:underline">Link</a>` : 'N/A'}
+                    </td>
+                `;
+                postsTableBody.appendChild(row);
+            });
+            document.getElementById('post-history').classList.remove('hidden');
+        }
+
+        function switchTab(tabName) {
+            Object.values(tabs).forEach(btn => btn.classList.remove('active'));
+            Object.values(tabContents).forEach(content => content.classList.add('hidden'));
+
+            tabs[tabName].classList.add('active');
+            tabContents[tabName].classList.remove('hidden');
+            
+            if (tabName === 'daily') {
+                updateUI();
+            } else if (tabName === 'weekly') {
+                updateWeeklyChart();
+            } else if (tabName === 'monthly') {
+                updateMonthlyChart();
+            }
+        }
+
+        async function initFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userStatusEl.textContent = `Logged in as User: ${userId}`;
+                        if (userId === adminUserId) {
+                             adminDashboard.classList.remove('hidden');
+                        }
+                        const collectionPath = `/artifacts/${appId}/public/data/posts`;
+                        console.log(`Listening to path: ${collectionPath}`);
+                        const q = query(collection(db, collectionPath), orderBy("timestamp", "desc"));
+                        onSnapshot(q, (snapshot) => {
+                            state.allPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            const now = new Date();
+                            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                            state.person1Posts = state.allPosts.filter(p => p.userId === userId && p.timestamp.toDate() >= today).length;
+                            state.person2Posts = state.allPosts.filter(p => p.userId !== userId && p.timestamp.toDate() >= today).length;
+                            state.postsMade = state.allPosts.length;
+                            updateUI();
+                        });
+                    } else {
+                        userStatusEl.textContent = 'Authenticating...';
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+            } catch (e) {
+                userStatusEl.textContent = `Error: ${e.message}`;
+            }
+        }
+        initFirebase();
+        
+        postTypeContainer.addEventListener('click', (event) => {
+            if (event.target.classList.contains('post-type-btn')) {
+                document.querySelectorAll('.post-type-btn').forEach(btn => btn.classList.remove('selected'));
+                event.target.classList.add('selected');
+                postType = event.target.textContent;
+            }
+        });
+
+        addPostBtn.addEventListener('click', async () => {
+            const link = postLinkInput.value.trim();
+            if (!postType) {
+                // Modal
+                return;
+            }
+            try {
+                const collectionPath = `/artifacts/${appId}/public/data/posts`;
+                console.log(`Adding post to path: ${collectionPath}`);
+                await addDoc(collection(db, collectionPath), {
+                    userId: userId,
+                    timestamp: new Date(),
+                    link: link,
+                    type: postType
+                });
+                postLinkInput.value = '';
+                document.querySelectorAll('.post-type-btn').forEach(btn => btn.classList.remove('selected'));
+                postType = null;
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            }
+        });
+
+        tabs.daily.addEventListener('click', () => switchTab('daily'));
+        tabs.weekly.addEventListener('click', () => switchTab('weekly'));
+        tabs.monthly.addEventListener('click', () => switchTab('monthly'));
+
+        const dailyProgressCtx = document.getElementById('dailyProgressChart').getContext('2d');
+        const dailyProgressText = document.getElementById('daily-progress-text');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const progressPercentage = document.getElementById('progress-percentage');
+        
+        dailyProgressChart = new Chart(dailyProgressCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Daily Progress'],
+                datasets: [
+                    { label: 'My Posts', data: [0], backgroundColor: '#60a5fa', borderWidth: 0 },
+                    { label: 'Partner Posts', data: [0], backgroundColor: '#fb923c', borderWidth: 0 }
+                ]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                scales: { x: { stacked: true, max: 32, grid: { display: false }, ticks: { display: false } }, y: { stacked: true, grid: { display: false }, ticks: { display: false } } },
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${context.raw} posts` } } }
+            }
+        });
+        
+        const adminTotalPostsCtx = document.getElementById('adminTotalPostsChart').getContext('2d');
+        adminTotalPostsChart = new Chart(adminTotalPostsCtx, {
+             type: 'bar',
+             data: {
+                 labels: ['Me', 'Others'],
+                 datasets: [{
+                     label: 'Total Posts',
+                     data: [0, 0],
+                     backgroundColor: ['#60a5fa', '#fb923c'],
+                     borderWidth: 0
+                 }]
+             },
+             options: {
+                 responsive: true,
+                 maintainAspectRatio: false,
+                 scales: {
+                     y: { beginAtZero: true },
+                     x: { grid: { display: false } }
+                 },
+                 plugins: {
+                     legend: { display: false },
+                     tooltip: { callbacks: { title: () => '' } }
+                 }
+             }
+        });
+
+        const adminDailyProgressCtx = document.getElementById('adminDailyProgressChart').getContext('2d');
+        adminDailyProgressChart = new Chart(adminDailyProgressCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Daily Progress'],
+                datasets: [
+                    { label: 'My Posts', data: [0], backgroundColor: '#60a5fa', borderWidth: 0 },
+                    { label: 'Other Posts', data: [0], backgroundColor: '#fb923c', borderWidth: 0 }
+                ]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                scales: { x: { stacked: true, max: 32, grid: { display: false }, ticks: { display: false } }, y: { stacked: true, grid: { display: false }, ticks: { display: false } } },
+                plugins: { legend: { display: true, position: 'bottom' }, tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${context.raw} posts` } } }
+            }
+        });
+    </script>
+</body>
+</html>
