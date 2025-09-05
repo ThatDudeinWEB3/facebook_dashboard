@@ -9,16 +9,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
-    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
-    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+    <!-- Updated Firebase SDK versions and imports -->
+    <script type="module" src="https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js"></script>
     <!-- Chosen Palette: Warm Neutrals with Blue/Orange Accents -->
     <!-- Application Structure Plan: The single-page dashboard now supports multiple user roles. The structure maintains its logical flow of KPIs, reports, and data entry for standard users. For an admin user, a new, dedicated dashboard section is revealed at the end of the page. This admin view focuses on macro-level insights, showing a direct comparison of user contributions via two distinct charts, allowing for a quick performance overview. The core data fetching and logic remain centralized, with conditional rendering controlling the user experience. -->
     <!-- Visualization & Content Choices:
         - Monthly Goal: Goal: Inform -> Viz: KPI Card + Progress Bar -> Interaction: Updates from Firestore data -> Justification: Provides a live status of the overall objective.
         - Daily/Weekly/Monthly Reports: Goal: Inform/Compare -> Viz: Tabbed views with Stacked Bar (daily) and Line (weekly/monthly) charts -> Interaction: Clicking tabs to switch views, data is from Firestore -> Justification: Breaks down the large goal into manageable, explorable chunks.
         - Posting Frequency & Team Split: Goal: Inform -> Viz: KPI Card + Doughnut Chart -> Interaction: Hover for tooltips -> Justification: Confirms the core strategy visually and succinctly.
-        - Add Post Form: Goal: Track/Engage -> Viz: Form with input fields -> Interaction: Button click saves data to Firestore -> Justification: Turns a static plan into an active, trackable process.
+        - Add Post Form: Goal: Track/Engage -> Viz: Form with input fields -> Interaction: Button click saves data to Firestore -> Justification: Turns a static plan into an an active, trackable process.
         - Post History: Goal: Organize/Inform -> Viz: Table -> Interaction: Displays details of recent posts -> Justification: Gives users transparency and a log of their activity.
         - Admin Comparison Chart: Goal: Compare -> Viz: Bar Chart -> Interaction: Hover for tooltips -> Justification: Provides a clear side-by-side view of total posts by user for management.
         - Admin Daily Posts Chart: Goal: Compare/Engage -> Viz: Stacked Bar Chart -> Interaction: Hover for tooltips -> Justification: Shows the total daily progress and each user's contribution to that total. -->
@@ -230,10 +231,13 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-analytics.js";
+        import * as firebase from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js"
 
+        // Use the firebase config provided by the environment
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
@@ -459,7 +463,12 @@
 
         async function initFirebase() {
             try {
+                // Set Firebase log level to debug for better console output
+                firebase.setLogLevel('debug');
+                console.log("Firebase config:", firebaseConfig);
+
                 const app = initializeApp(firebaseConfig);
+                const analytics = getAnalytics(app); // Added analytics initialization
                 auth = getAuth(app);
                 db = getFirestore(app);
 
