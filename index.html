@@ -234,10 +234,20 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, query, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-        import * as firebase from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js"
 
         // Use the firebase config provided by the environment
-        const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config !== '' ? JSON.parse(__firebase_config) : null;
+        const firebaseConfig = (() => {
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                try {
+                    return JSON.parse(__firebase_config);
+                } catch (e) {
+                    console.error("Failed to parse __firebase_config:", e);
+                    return null;
+                }
+            }
+            return null;
+        })();
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         const adminUserId = "admin_user_id_here";
@@ -468,10 +478,6 @@
                     return;
                 }
                 
-                // Set Firebase log level to debug for better console output
-                firebase.setLogLevel('debug');
-                console.log("Firebase config:", firebaseConfig);
-
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
